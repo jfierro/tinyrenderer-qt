@@ -1,0 +1,31 @@
+#pragma once
+
+#include <QPainter>
+#include <QPixmap>
+
+struct point
+{
+  int x;
+  int y;
+};
+
+class FrameBuffer
+{
+public:
+  FrameBuffer(int w, int h);
+
+  void clear(QColor c);
+  const QPixmap &pixmap() const;
+
+  void set(int x, int y, QColor c);
+
+  void line(int ax, int ay, int bx, int by, QColor c);
+
+  void triangle(point p1, point p2, point p3, QColor c);
+
+  void scanline(int y, int xleft, int xright, QColor c);
+
+private:
+  QPixmap frameBuffer;
+  QPainter painter;
+};
