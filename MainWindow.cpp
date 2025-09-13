@@ -9,6 +9,8 @@ constexpr QRgb green   = qRgba(  0, 255, 0, 255);
 constexpr QRgb red     = qRgba(255,   0,   0, 255);
 constexpr QRgb blue    = qRgba( 64, 128, 255, 255);
 constexpr QRgb purple  = qRgba(128, 128, 255, 255);
+constexpr QRgb orange  = qRgba(0xff, 0x5c, 0, 255);
+constexpr QRgb magenta = qRgba(255,   0, 255, 255);
 constexpr QRgb yellow  = qRgba(255, 200,   0, 255);
 
 MainWindow::MainWindow (QWidget *parent)
@@ -33,6 +35,16 @@ MainWindow::paintEvent (QPaintEvent *event)
   if (drawTriangle)
     {
       fb.triangle({ax, ay}, {bx, by}, {cx, cy}, blue);
+    }
+
+  if (drawTriangle2)
+    {
+      fb.triangle2({ax, ay}, {bx, by}, {cx, cy}, orange);
+    }
+
+  if (drawTriangle3)
+    {
+      fb.triangle3({ax, ay}, {bx, by}, {cx, cy}, magenta);
     }
 
   if (drawLines)
@@ -67,10 +79,20 @@ MainWindow::keyPressEvent (QKeyEvent *e)
     }
   else if (e->key() == Qt::Key_2)
     {
-      drawLines = !drawLines;
+      drawTriangle2 = !drawTriangle2;
       stateChange = true;
     }
   else if (e->key() == Qt::Key_3)
+    {
+      drawTriangle3 = !drawTriangle3;
+      stateChange = true;
+    }
+  else if (e->key() == Qt::Key_4)
+    {
+      drawLines = !drawLines;
+      stateChange = true;
+    }
+  else if (e->key() == Qt::Key_5)
     {
       drawPoints = !drawPoints;
       stateChange = true;

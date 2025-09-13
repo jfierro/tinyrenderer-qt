@@ -115,16 +115,79 @@ FrameBuffer::triangle (point p, point q, point r, QColor c)
     }
 }
 
+// This version is closer to tinyrenderer's
 void
-FrameBuffer::scanline (int y, int xleft, int xright, QColor c)
+FrameBuffer::triangle2 (point p, point q, point r, QColor c)
 {
-  if (xleft > xright)
+  painter.setPen(c);
+
+  // Sort by the y coordinate such that p.y <= q.y <= r.y
+  if (p.y > q.y) std::swap(p, q);
+  if (p.y > r.y) std::swap(p, r);
+  if (q.y > r.y) std::swap(q, r);
+
+  // draw first segment
+  if (p.y != q.y)
     {
-      std::swap(xleft, xright);
+      for (int y = p.y; y <= q.y; y++)
+        {
+          int x1 = p.x + std::round(((float)(q.x - p.x)/(q.y - p.y))*(y - p.y));
+          int x2 = p.x + std::round(((float)(r.x - p.x)/(r.y - p.y))*(y - p.y));
+          scanline(y, x1, x2, c);
+        }
     }
-  while (xleft <= xright)
+
+  // draw second segment
+  if (q.y != r.y)
     {
-      painter.drawPoint(xleft, frameBuffer.height() - y);
-      xleft++;
+      for (int y = q.y; y <= r.y; y++) // overwriting one scanline here
+        {
+          int x1 = q.x + std::round(((float)(r.x - q.x)/(r.y - q.y))*(y - q.y));
+          int x2 = p.x + std::round(((float)(r.x - p.x)/(r.y - p.y))*(y - p.y));
+          scanline(y, x1, x2, c);
+        }
+    }
+}
+
+namespace
+{
+inline float signedArea(point p, point q, point r)
+{
+  return 0.5f*(p.x*(r.y-q.y) + q.x*(p.y-r.y) + r.x*(q.y-p.y));
+}
+}
+
+void
+FrameBuffer::triangle3 (point p, point q, point r, QColor c)
+{
+  int minx = std::min(std::min(p.x, q.x), r.x);
+  int maxx = std::max(std::max(p.x, q.x), r.x);
+  int miny = std::min(std::min(p.y, q.y), r.y);
+  int maxy = std::max(std::max(p.y, q.y), r.y);
+  float area = signedArea(p, q, r);
+
+  painter.setPen(c);
+//#pragma omp parallel for
+  for (int x = minx; x <= maxx; x++)
+    {
+      for (int y = miny; y <= maxy; y++)
+        {
+          float alpha = signedArea({x,y}, q, r)/area;
+          float beta  = signedArea({x,y}, r, p)/area;
+          float gamma = signedArea({x,y}, p, q)/area;
+          if (alpha >= 0 && beta >= 0 && gamma >= 0)
+            {
+              painter.drawPoint(x, frameBuffer.height() - y);
+            }
+        }
+    }
+}
+
+void
+FrameBuffer::scanline (int y, int x1, int x2, QColor c)
+{
+  for (int x = std::min(x1, x2); x <= std::max(x1, x2); x++)
+    {
+      painter.drawPoint(x, frameBuffer.height() - y);
     }
 }

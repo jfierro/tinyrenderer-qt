@@ -29,6 +29,8 @@ private:
   FrameBuffer fb;
   QLabel bg;
   bool drawTriangle = true;
+  bool drawTriangle2 = false;
+  bool drawTriangle3 = false;
   bool drawLines = true;
   bool drawPoints = true;
 };

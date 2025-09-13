@@ -21,7 +21,9 @@ public:
 
   void line(int ax, int ay, int bx, int by, QColor c);
 
-  void triangle(point p1, point p2, point p3, QColor c);
+  void triangle(point p, point q, point r, QColor c);
+  void triangle2(point p, point q, point r, QColor c);
+  void triangle3(point p, point q, point r, QColor c);
 
   void scanline(int y, int xleft, int xright, QColor c);
 
