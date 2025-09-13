@@ -16,7 +16,7 @@ constexpr QRgb cyan    = qRgba(  0, 255, 255, 255);
 constexpr QRgb yellow  = qRgba(255, 200,   0, 255);
 
 MainWindow::MainWindow (int width, int height, QWidget *parent)
-    : QMainWindow (parent), ui (new Ui::MainWindow), fb(width, height)
+    : QMainWindow (parent), ui (new Ui::MainWindow), /*fb(64, 64) */ fb(width, height)
 {
   setFixedSize(width, height);
   ui->setupUi (this);
@@ -36,7 +36,7 @@ MainWindow::~MainWindow () { delete ui; }
 void
 MainWindow::paintEvent (QPaintEvent *event)
 {
-  fb.clear(Qt::black);
+  fb.clear(QColor(0,0,0));
 
   if (model.has_value())
     {
@@ -73,12 +73,13 @@ MainWindow::drawShapes ()
 
   if (drawTriangle3)
     {
-      fb.triangle3({ax, ay}, {bx, by}, {cx, cy}, magenta);
+      fb.triangle3({ax, ay}, {cx, cy}, {bx, by}, magenta);
     }
 
   if (drawTriangle4)
     {
-      fb.triangle4({ax, ay}, {bx, by}, {cx, cy}, cyan);
+      fb.triangle4({ax, ay}, {50, 20}, {cx, cy}, magenta);
+      fb.triangle4({ax, ay}, {cx, cy}, {bx, by}, cyan);
     }
 
   if (drawLines)
@@ -120,13 +121,21 @@ MainWindow::drawWireframeTriangle (const QVector3D &v0, const QVector3D &v1,
   fb.line(x2, y2, x1, y1, c);
 }
 
+inline point
+MainWindow::project(const QVector3D &v)
+{
+  int x = std::clamp((int)std::round((v.x()+1)*fb.width()/2.0), 0, fb.width()-1);
+  int y = std::clamp((int)std::round((v.y()+1)*fb.height()/2.0), 0, fb.height()-1);
+  return {x, y};
+}
+
 void
 MainWindow::drawModel ()
 {
   const QVector<QVector3D> &vertices = model->vertices();
   const QVector<uint16_t> &indices = model->indices();
 
-  QColor c = red;
+  // QColor c = red;
 
   // A Model read by Model::readObjFile() is guaranteed to have a number indices that is a multiple
   // of 3.
@@ -136,18 +145,20 @@ MainWindow::drawModel ()
       const QVector3D &v1 = vertices[indices[3*i+1]];
       const QVector3D &v2 = vertices[indices[3*i+2]];
 
-      drawWireframeTriangle(v0, v1, v2, c);
+      //drawWireframeTriangle(v0, v1, v2, c);
+      QColor c(std::rand()%255, std::rand()%255, std::rand()%255, 255);
+      fb.triangle4(project(v0), project(v1), project(v2), c);
     }
 
-  int w = fb.width();
-  int h = fb.height();
-  for (int i = 0; i < vertices.size(); i++)
-    {
-      const QVector3D &v = vertices[i];
-      int x = std::clamp((int)std::round((v.x()+1)*w/2.0), 0, w-1);
-      int y = std::clamp((int)std::round((v.y()+1)*h/2.0), 0, h-1);
-      fb.set(x, y, white);
-    }
+  // int w = fb.width();
+  // int h = fb.height();
+  // for (int i = 0; i < vertices.size(); i++)
+  //   {
+  //     const QVector3D &v = vertices[i];
+  //     int x = std::clamp((int)std::round((v.x()+1)*w/2.0), 0, w-1);
+  //     int y = std::clamp((int)std::round((v.y()+1)*h/2.0), 0, h-1);
+  //     fb.set(x, y, white);
+  //   }
 }
 
 void

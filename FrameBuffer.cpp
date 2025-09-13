@@ -163,22 +163,35 @@ FrameBuffer::triangle2 (point p, point q, point r, QColor c)
 
 namespace
 {
-inline float signedArea(point p, point q, point r)
+float signedArea(point p, point q, point r)
 {
-  return 0.5f*(p.x*(r.y-q.y) + q.x*(p.y-r.y) + r.x*(q.y-p.y));
+  return 0.5f*(p.x*(q.y-r.y) + q.x*(r.y-p.y) + r.x*(p.y-q.y));
 }
 
-inline float signedArea(float x, float y, point p, point q)
+float signedArea(float x, float y, point p, point q)
 {
-  return 0.5f*(x*(q.y-p.y) + p.x*(y-q.y) + q.x*(p.y-y));
+  return 0.5f*(x*(p.y-q.y) + p.x*(q.y-y) + q.x*(y-p.y));
 }
 
-inline bool inside(float x, float y, point p, point q, point r, float area)
+bool inside(float x, float y, point p, point q, point r, float area)
 {
   float alpha = signedArea(x, y, q, r)/area;
   float beta  = signedArea(x, y, r, p)/area;
   float gamma = signedArea(x, y, p, q)/area;
   return alpha >= 0 && beta >= 0 && gamma >= 0;
+}
+
+QColor blend(QColor dstColor, QColor srcColor, float srcAlpha)
+{
+  float dstAlpha = dstColor.alphaF();
+  float resAlpha = srcAlpha + dstAlpha*(1-srcAlpha);
+
+  int resRed   = static_cast<int>((srcColor.red()  *srcAlpha + dstColor.red()*dstAlpha*(1 - srcAlpha)) / resAlpha + 0.5f);
+  int resGreen = static_cast<int>((srcColor.green()*srcAlpha + dstColor.green()*dstAlpha*(1 - srcAlpha)) / resAlpha + 0.5f);
+  int resBlue  = static_cast<int>((srcColor.blue() *srcAlpha + dstColor.blue()*dstAlpha*(1 - srcAlpha)) / resAlpha + 0.5f);
+  int resAlphaInt = static_cast<int>(resAlpha*255 + 0.5f);
+
+  return QColor(resRed, resGreen, resBlue, resAlphaInt);
 }
 }
 
@@ -191,6 +204,11 @@ FrameBuffer::triangle3 (point p, point q, point r, QColor c)
   int miny = std::min(std::min(p.y, q.y), r.y);
   int maxy = std::max(std::max(p.y, q.y), r.y);
   float area = signedArea(p, q, r);
+
+  if (area < 1)
+    {
+      return; // backface culling
+    }
 
 #pragma omp parallel for
   for (int x = minx; x <= maxx; x++)
@@ -218,18 +236,24 @@ FrameBuffer::triangle4(point p, point q, point r, QColor c)
   int maxy = std::max(std::max(p.y, q.y), r.y);
   float area = signedArea(p, q, r);
 
-#pragma omp parallel for
+  if (area < 1)
+    {
+      return; // backface culling
+    }
+
+//#pragma omp parallel for
   for (int x = minx; x <= maxx; x++)
     {
       for (int y = miny; y <= maxy; y++)
         {
-          int samplesInside =   inside(x - 0.25, y + 0.25, p, q, r, area)
-                              + inside(x + 0.25, y + 0.25, p, q, r, area)
-                              + inside(x - 0.25, y - 0.25, p, q, r, area)
-                              + inside(x + 0.25, y - 0.25, p, q, r, area);
+          int samplesInside =   (inside(x - 0.25, y + 0.25, p, q, r, area)?1:0)
+                              + (inside(x + 0.25, y + 0.25, p, q, r, area)?1:0)
+                              + (inside(x - 0.25, y - 0.25, p, q, r, area)?1:0)
+                              + (inside(x + 0.25, y - 0.25, p, q, r, area)?1:0);
 
-          QColor c2 = QColor(c.red(), c.blue(), c.green(), c.alpha()*(samplesInside/4.0));
-          frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, c2);
+          if (samplesInside == 0) continue;
+          QColor oldColor = frameBuffer.pixelColor(x, y);
+          frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, blend(oldColor, c, (samplesInside/4.0)));
         }
     }
 }

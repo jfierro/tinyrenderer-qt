@@ -9,7 +9,7 @@ constexpr int MAX_FACES    = 65536;
 constexpr int MAX_VERTICES = 65536;
 constexpr int MAX_LINESIZE = 1024;
 
-#define DECIMAL_NUMBER_REGEX "[+-]?(?:\\d*)?\\.?(?:\\d*)"
+#define DECIMAL_NUMBER_REGEX "[+-]?(?:\\d*)?\\.?(?:\\d*)(?:e[-+]?\\d+)?"
 #define INDEX_GROUP_PATTERN  "(\\d+)\\/(\\d+)\\/(\\d+)"
 constexpr const char *whitespaceOrCommentPattern = "^(?:\\s*#.*)|\\s+$";
 constexpr const char *vPattern = "^v\\s(" DECIMAL_NUMBER_REGEX

@@ -28,6 +28,7 @@ protected:
   void drawModel();
   void drawWireframeTriangle (const QVector3D &v0, const QVector3D &v1,
                               const QVector3D &v2, QColor c);
+  point project(const QVector3D &v);
 
 private:
   Ui::MainWindow *ui;
@@ -37,7 +38,7 @@ private:
 
   bool drawTriangle = false;
   bool drawTriangle2 = false;
-  bool drawTriangle3 = true;
+  bool drawTriangle3 = false;
   bool drawTriangle4 = true;
   bool drawLines = false;
   bool drawPoints = false;
