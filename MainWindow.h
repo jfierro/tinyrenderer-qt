@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FrameBuffer.h"
+#include "Model.h"
 
 #include <QMainWindow>
 #include <qlabel.h>
@@ -17,17 +18,22 @@ class MainWindow : public QMainWindow
   Q_OBJECT
 
 public:
-  MainWindow (QWidget *parent = nullptr);
+  MainWindow (int width, int height, QWidget *parent = nullptr);
   ~MainWindow ();
 
 protected:
   void paintEvent(QPaintEvent *event) override;
   void keyPressEvent(QKeyEvent *e) override;
+  void drawShapes();
+  void drawModel();
+  void drawWireframeTriangle (const QVector3D &v0, const QVector3D &v1,
+                              const QVector3D &v2, QColor c);
 
 private:
   Ui::MainWindow *ui;
   FrameBuffer fb;
   QLabel bg;
+  std::optional<Model> model;
 
   bool drawTriangle = false;
   bool drawTriangle2 = false;

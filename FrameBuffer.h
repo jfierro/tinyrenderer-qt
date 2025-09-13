@@ -10,6 +10,8 @@ struct point
   int y;
 };
 
+// TODO: don't draw to a QImage, that is very slow becuase setPixelColor() does validations
+//       and probably isn't inlined.
 class FrameBuffer
 {
 public:
@@ -17,6 +19,8 @@ public:
 
   void clear(QColor c);
   const QImage &qimage() const;
+  int width() const;
+  int height() const;
 
   void set(int x, int y, QColor c);
   void line(int ax, int ay, int bx, int by, QColor c);
@@ -28,4 +32,5 @@ public:
 
 private:
   QImage frameBuffer;
+  int w, h;
 };

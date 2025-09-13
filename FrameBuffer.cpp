@@ -1,7 +1,7 @@
 #include "FrameBuffer.h"
 
 FrameBuffer::FrameBuffer(int w, int h)
-    : frameBuffer(w, h, QImage::Format_ARGB32)
+    : w(w), h(h), frameBuffer(w, h, QImage::Format_ARGB32)
 {}
 
 void
@@ -16,16 +16,34 @@ FrameBuffer::qimage () const
   return frameBuffer;
 }
 
+int
+FrameBuffer::width () const
+{
+  return w;
+}
+
+int
+FrameBuffer::height () const
+{
+  return h;
+}
+
 void
 FrameBuffer::set(int x, int y, QColor c)
 {
-  frameBuffer.setPixelColor(x, frameBuffer.height() - y, c);
+  frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, c);
 }
 
-// TODO: validations? clipping?
+
+// Clamping is not the same as clipping! But it'll have to do for now.
 void
 FrameBuffer::line(int ax, int ay, int bx, int by, QColor c)
 {
+  ax = std::clamp(ax, 0, w-1);
+  ay = std::clamp(ay, 0, h-1);
+  bx = std::clamp(bx, 0, w-1);
+  by = std::clamp(by, 0, h-1);
+
   bool transpose = false;
   if (std::abs(by - ay) > std::abs(bx - ax))
     {
@@ -43,14 +61,15 @@ FrameBuffer::line(int ax, int ay, int bx, int by, QColor c)
   int ierror = 0;
   for (int x = ax; x <= bx; x++)
     {
-      if (transpose) frameBuffer.setPixelColor(y, frameBuffer.height() - x, c);
-      else           frameBuffer.setPixelColor(x, frameBuffer.height() - y, c);
+      if (transpose) frameBuffer.setPixelColor(y, frameBuffer.height()-1 - x, c);
+      else           frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, c);
       ierror += 2*std::abs(by-ay);
       y      += ((by > ay) ? 1 : -1)*(ierror > bx - ax);
       ierror -= 2*(bx-ax)           *(ierror > bx - ax);
     }
 }
 
+// Very ugly triangle drawing :P
 // TODO: range validations, clipping?
 // TODO: guard against division by 0
 void
@@ -163,6 +182,7 @@ inline bool inside(float x, float y, point p, point q, point r, float area)
 }
 }
 
+// Barycentric coordinate testing
 void
 FrameBuffer::triangle3 (point p, point q, point r, QColor c)
 {
@@ -172,7 +192,7 @@ FrameBuffer::triangle3 (point p, point q, point r, QColor c)
   int maxy = std::max(std::max(p.y, q.y), r.y);
   float area = signedArea(p, q, r);
 
-//#pragma omp parallel for
+#pragma omp parallel for
   for (int x = minx; x <= maxx; x++)
     {
       for (int y = miny; y <= maxy; y++)
@@ -182,12 +202,13 @@ FrameBuffer::triangle3 (point p, point q, point r, QColor c)
           float gamma = signedArea({x,y}, p, q)/area;
           if (alpha >= 0 && beta >= 0 && gamma >= 0)
             {
-              frameBuffer.setPixelColor(x, frameBuffer.height() - y, c);
+              frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, c);
             }
         }
     }
 }
 
+// Barycentric coordinate testing with 4 samples per pixel
 void
 FrameBuffer::triangle4(point p, point q, point r, QColor c)
 {
@@ -208,7 +229,7 @@ FrameBuffer::triangle4(point p, point q, point r, QColor c)
                               + inside(x + 0.25, y - 0.25, p, q, r, area);
 
           QColor c2 = QColor(c.red(), c.blue(), c.green(), c.alpha()*(samplesInside/4.0));
-          frameBuffer.setPixelColor(x, frameBuffer.height() - y, c2);
+          frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, c2);
         }
     }
 }
@@ -218,6 +239,6 @@ FrameBuffer::scanline (int y, int x1, int x2, QColor c)
 {
   for (int x = std::min(x1, x2); x <= std::max(x1, x2); x++)
     {
-      frameBuffer.setPixelColor(x, frameBuffer.height() - y, c);
+      frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, c);
     }
 }
