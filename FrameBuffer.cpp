@@ -1,7 +1,7 @@
 #include "FrameBuffer.h"
 
 FrameBuffer::FrameBuffer(int w, int h)
-    : frameBuffer(w, h), painter(&frameBuffer)
+    : frameBuffer(w, h, QImage::Format_ARGB32)
 {}
 
 void
@@ -10,8 +10,8 @@ FrameBuffer::clear (QColor c)
   frameBuffer.fill(c);
 }
 
-const QPixmap &
-FrameBuffer::pixmap () const
+const QImage &
+FrameBuffer::qimage () const
 {
   return frameBuffer;
 }
@@ -19,16 +19,13 @@ FrameBuffer::pixmap () const
 void
 FrameBuffer::set(int x, int y, QColor c)
 {
-  painter.setPen(c);
-  painter.drawPoint(x, frameBuffer.height() - y);
+  frameBuffer.setPixelColor(x, frameBuffer.height() - y, c);
 }
 
 // TODO: validations? clipping?
 void
 FrameBuffer::line(int ax, int ay, int bx, int by, QColor c)
 {
-  painter.setPen(c);
-
   bool transpose = false;
   if (std::abs(by - ay) > std::abs(bx - ax))
     {
@@ -46,8 +43,8 @@ FrameBuffer::line(int ax, int ay, int bx, int by, QColor c)
   int ierror = 0;
   for (int x = ax; x <= bx; x++)
     {
-      if (transpose) painter.drawPoint(y, frameBuffer.height() - x);
-      else           painter.drawPoint(x, frameBuffer.height() - y);
+      if (transpose) frameBuffer.setPixelColor(y, frameBuffer.height() - x, c);
+      else           frameBuffer.setPixelColor(x, frameBuffer.height() - y, c);
       ierror += 2*std::abs(by-ay);
       y      += ((by > ay) ? 1 : -1)*(ierror > bx - ax);
       ierror -= 2*(bx-ax)           *(ierror > bx - ax);
@@ -59,8 +56,6 @@ FrameBuffer::line(int ax, int ay, int bx, int by, QColor c)
 void
 FrameBuffer::triangle (point p, point q, point r, QColor c)
 {
-  painter.setPen(c);
-
   // swim the point with highest y-coord so that p0 is the highest point
   if (p.y < q.y)
     {
@@ -119,8 +114,6 @@ FrameBuffer::triangle (point p, point q, point r, QColor c)
 void
 FrameBuffer::triangle2 (point p, point q, point r, QColor c)
 {
-  painter.setPen(c);
-
   // Sort by the y coordinate such that p.y <= q.y <= r.y
   if (p.y > q.y) std::swap(p, q);
   if (p.y > r.y) std::swap(p, r);
@@ -155,6 +148,19 @@ inline float signedArea(point p, point q, point r)
 {
   return 0.5f*(p.x*(r.y-q.y) + q.x*(p.y-r.y) + r.x*(q.y-p.y));
 }
+
+inline float signedArea(float x, float y, point p, point q)
+{
+  return 0.5f*(x*(q.y-p.y) + p.x*(y-q.y) + q.x*(p.y-y));
+}
+
+inline bool inside(float x, float y, point p, point q, point r, float area)
+{
+  float alpha = signedArea(x, y, q, r)/area;
+  float beta  = signedArea(x, y, r, p)/area;
+  float gamma = signedArea(x, y, p, q)/area;
+  return alpha >= 0 && beta >= 0 && gamma >= 0;
+}
 }
 
 void
@@ -166,7 +172,6 @@ FrameBuffer::triangle3 (point p, point q, point r, QColor c)
   int maxy = std::max(std::max(p.y, q.y), r.y);
   float area = signedArea(p, q, r);
 
-  painter.setPen(c);
 //#pragma omp parallel for
   for (int x = minx; x <= maxx; x++)
     {
@@ -177,8 +182,33 @@ FrameBuffer::triangle3 (point p, point q, point r, QColor c)
           float gamma = signedArea({x,y}, p, q)/area;
           if (alpha >= 0 && beta >= 0 && gamma >= 0)
             {
-              painter.drawPoint(x, frameBuffer.height() - y);
+              frameBuffer.setPixelColor(x, frameBuffer.height() - y, c);
             }
+        }
+    }
+}
+
+void
+FrameBuffer::triangle4(point p, point q, point r, QColor c)
+{
+  int minx = std::min(std::min(p.x, q.x), r.x);
+  int maxx = std::max(std::max(p.x, q.x), r.x);
+  int miny = std::min(std::min(p.y, q.y), r.y);
+  int maxy = std::max(std::max(p.y, q.y), r.y);
+  float area = signedArea(p, q, r);
+
+#pragma omp parallel for
+  for (int x = minx; x <= maxx; x++)
+    {
+      for (int y = miny; y <= maxy; y++)
+        {
+          int samplesInside =   inside(x - 0.25, y + 0.25, p, q, r, area)
+                              + inside(x + 0.25, y + 0.25, p, q, r, area)
+                              + inside(x - 0.25, y - 0.25, p, q, r, area)
+                              + inside(x + 0.25, y - 0.25, p, q, r, area);
+
+          QColor c2 = QColor(c.red(), c.blue(), c.green(), c.alpha()*(samplesInside/4.0));
+          frameBuffer.setPixelColor(x, frameBuffer.height() - y, c2);
         }
     }
 }
@@ -188,6 +218,6 @@ FrameBuffer::scanline (int y, int x1, int x2, QColor c)
 {
   for (int x = std::min(x1, x2); x <= std::max(x1, x2); x++)
     {
-      painter.drawPoint(x, frameBuffer.height() - y);
+      frameBuffer.setPixelColor(x, frameBuffer.height() - y, c);
     }
 }

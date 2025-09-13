@@ -28,9 +28,11 @@ private:
   Ui::MainWindow *ui;
   FrameBuffer fb;
   QLabel bg;
-  bool drawTriangle = true;
+
+  bool drawTriangle = false;
   bool drawTriangle2 = false;
-  bool drawTriangle3 = false;
-  bool drawLines = true;
-  bool drawPoints = true;
+  bool drawTriangle3 = true;
+  bool drawTriangle4 = true;
+  bool drawLines = false;
+  bool drawPoints = false;
 };
