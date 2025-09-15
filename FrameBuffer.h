@@ -28,6 +28,8 @@ public:
   void triangle2(point p, point q, point r, QColor c);
   void triangle3(point p, point q, point r, QColor c);
   void triangle4(point p, point q, point r, QColor c);
+  void triangle5(point p, point q, point r, QColor c);
+  void triangle6(point p, point q, point r, QColor c);
   void scanline(int y, int xleft, int xright, QColor c);
 
 private:

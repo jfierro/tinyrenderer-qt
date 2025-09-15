@@ -1,4 +1,5 @@
 #include "FrameBuffer.h"
+#include <QtCore/qdebug.h>
 
 FrameBuffer::FrameBuffer(int w, int h)
     : w(w), h(h), frameBuffer(w, h, QImage::Format_ARGB32)
@@ -181,17 +182,19 @@ bool inside(float x, float y, point p, point q, point r, float area)
   return alpha >= 0 && beta >= 0 && gamma >= 0;
 }
 
-QColor blend(QColor dstColor, QColor srcColor, float srcAlpha)
+QColor blend(QColor a, QColor b, float alphaA, float alphaB)
 {
-  float dstAlpha = dstColor.alphaF();
-  float resAlpha = srcAlpha + dstAlpha*(1-srcAlpha);
+  float alphaTotal = alphaA + alphaB;
+  float aContrib = alphaA/alphaTotal;
+  float bContrib = alphaB/alphaTotal;
 
-  int resRed   = static_cast<int>((srcColor.red()  *srcAlpha + dstColor.red()*dstAlpha*(1 - srcAlpha)) / resAlpha + 0.5f);
-  int resGreen = static_cast<int>((srcColor.green()*srcAlpha + dstColor.green()*dstAlpha*(1 - srcAlpha)) / resAlpha + 0.5f);
-  int resBlue  = static_cast<int>((srcColor.blue() *srcAlpha + dstColor.blue()*dstAlpha*(1 - srcAlpha)) / resAlpha + 0.5f);
-  int resAlphaInt = static_cast<int>(resAlpha*255 + 0.5f);
+  float red   = a.red()  *aContrib + b.red()  *bContrib;
+  float green = a.green()*aContrib + b.green()*bContrib;
+  float blue  = a.blue() *aContrib + b.blue() *bContrib;
 
-  return QColor(resRed, resGreen, resBlue, resAlphaInt);
+  int alpha = alphaTotal*255 + 0.5f;
+  QColor c(red+0.5f, green+0.5f, blue+0.5f, std::clamp(alpha, 0, 255));
+  return c;
 }
 }
 
@@ -241,7 +244,7 @@ FrameBuffer::triangle4(point p, point q, point r, QColor c)
       return; // backface culling
     }
 
-//#pragma omp parallel for
+#pragma omp parallel for
   for (int x = minx; x <= maxx; x++)
     {
       for (int y = miny; y <= maxy; y++)
@@ -252,8 +255,145 @@ FrameBuffer::triangle4(point p, point q, point r, QColor c)
                               + (inside(x + 0.25, y - 0.25, p, q, r, area)?1:0);
 
           if (samplesInside == 0) continue;
-          QColor oldColor = frameBuffer.pixelColor(x, y);
-          frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, blend(oldColor, c, (samplesInside/4.0)));
+          QColor oldColor = frameBuffer.pixelColor(x, frameBuffer.height()-1 - y);
+          frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y,
+                                    blend(oldColor, c, oldColor.alpha()/255.0f, (samplesInside/4.0)));
+        }
+    }
+}
+
+namespace
+{
+inline bool edgeIsTopLeft(const point &a, const point &b)
+{
+  return ((a.y == b.y) && (b.x < a.x)) || (a.y < b.y);
+}
+
+inline int edgeFunction(const int &x, const int &y, const point &s, const int &dx, const int &dy)
+{
+  return (x - s.x)*dy - (y - s.y)*dx;
+}
+
+inline float edgeFunction(const float &x, const float &y, const point &s, const int &dx, const int &dy)
+{
+  return (x - s.x)*dy - (y - s.y)*dx;
+}
+
+inline int isInside(const float &x, const float &y,
+                    const point &p, const point &q, const point &r,
+                    const int &pe_dx, const int &pe_dy,
+                    const int &qe_dx, const int &qe_dy,
+                    const int &re_dx, const int &re_dy,
+                    const bool &pe_topleft, const bool &qe_topleft, const bool &re_topleft)
+{
+  int e0 = edgeFunction(x, y, p, pe_dx, pe_dy);
+  int e1 = edgeFunction(x, y, q, qe_dx, qe_dy);
+  int e2 = edgeFunction(x, y, r, re_dx, re_dy);
+
+  bool isInside =    ((e0 < 0) || ((e0 == 0 ) && pe_topleft))
+                  && ((e1 < 0) || ((e1 == 0 ) && qe_topleft))
+                  && ((e2 < 0) || ((e2 == 0 ) && re_topleft));
+
+  return isInside ? 1 : 0;
+}
+
+}
+
+// Using Pineda's edge functions
+void
+FrameBuffer::triangle5 (point p, point q, point r, QColor c)
+{
+  // we define 3 edges:
+  //   pe: from P to Q
+  //   qe: from Q to R
+  //   re: from R to P
+  int pe_dx = q.x - p.x;
+  int pe_dy = q.y - p.y;
+  int qe_dx = r.x - q.x;
+  int qe_dy = r.y - q.y;
+  int re_dx = p.x - r.x;
+  int re_dy = p.y - r.y;
+
+  // backface culling
+  if (edgeFunction(r.x, r.y, p, pe_dx, pe_dy) > 0)
+    {
+      return;
+    }
+
+  bool pe_topleft = edgeIsTopLeft(p, q);
+  bool qe_topleft = edgeIsTopLeft(q, r);
+  bool re_topleft = edgeIsTopLeft(r, p);
+
+  // Calculate bounding box
+  int minx = std::min(std::min(p.x, q.x), r.x);
+  int maxx = std::max(std::max(p.x, q.x), r.x);
+  int miny = std::min(std::min(p.y, q.y), r.y);
+  int maxy = std::max(std::max(p.y, q.y), r.y);
+
+#pragma omp parallel for
+  for (int x = minx; x <= maxx; x++)
+    {
+      for (int y = miny; y <= maxy; y++)
+        {
+          int e0 = edgeFunction(x, y, p, pe_dx, pe_dy);
+          int e1 = edgeFunction(x, y, q, qe_dx, qe_dy);
+          int e2 = edgeFunction(x, y, r, re_dx, re_dy);
+
+          bool isInside =    ((e0 < 0) || ((e0 == 0 ) && pe_topleft))
+                          && ((e1 < 0) || ((e1 == 0 ) && qe_topleft))
+                          && ((e2 < 0) || ((e2 == 0 ) && re_topleft));
+          if (isInside)
+            {
+              frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, c);
+            }
+        }
+    }
+}
+
+// Using Pineda's edge functions + multisampling
+void
+FrameBuffer::triangle6(point p, point q, point r, QColor c)
+{
+  // we define 3 edges:
+  //   pe: from P to Q
+  //   qe: from Q to R
+  //   re: from R to P
+  int pe_dx = q.x - p.x;
+  int pe_dy = q.y - p.y;
+  int qe_dx = r.x - q.x;
+  int qe_dy = r.y - q.y;
+  int re_dx = p.x - r.x;
+  int re_dy = p.y - r.y;
+
+  // backface culling
+  if (edgeFunction(r.x, r.y, p, pe_dx, pe_dy) > 0)
+    {
+      return;
+    }
+
+  bool pe_topleft = edgeIsTopLeft(p, q);
+  bool qe_topleft = edgeIsTopLeft(q, r);
+  bool re_topleft = edgeIsTopLeft(r, p);
+
+  // Calculate bounding box
+  int minx = std::min(std::min(p.x, q.x), r.x);
+  int maxx = std::max(std::max(p.x, q.x), r.x);
+  int miny = std::min(std::min(p.y, q.y), r.y);
+  int maxy = std::max(std::max(p.y, q.y), r.y);
+
+
+#pragma omp parallel for
+  for (int x = minx; x <= maxx; x++)
+    {
+      for (int y = miny; y <= maxy; y++)
+        {
+          int count =   isInside(x+0.25f, y+0.25f, p, q, r, pe_dx, pe_dy, qe_dx, qe_dy, re_dx, re_dy, pe_topleft, qe_topleft, re_topleft)
+                      + isInside(x-0.25f, y+0.25f, p, q, r, pe_dx, pe_dy, qe_dx, qe_dy, re_dx, re_dy, pe_topleft, qe_topleft, re_topleft)
+                      + isInside(x-0.25f, y-0.25f, p, q, r, pe_dx, pe_dy, qe_dx, qe_dy, re_dx, re_dy, pe_topleft, qe_topleft, re_topleft)
+                      + isInside(x+0.25f, y-0.25f, p, q, r, pe_dx, pe_dy, qe_dx, qe_dy, re_dx, re_dy, pe_topleft, qe_topleft, re_topleft);
+          QColor oldColor = frameBuffer.pixelColor(x, frameBuffer.height()-1 - y);
+          frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y,
+                                    blend(oldColor, c, oldColor.alpha()/255.0f, count/4.0f));
         }
     }
 }

@@ -35,11 +35,14 @@ private:
   FrameBuffer fb;
   QLabel bg;
   std::optional<Model> model;
+  int yRot = 0;
 
   bool drawTriangle = false;
-  bool drawTriangle2 = false;
+  bool drawTriangle2 = true;
   bool drawTriangle3 = false;
-  bool drawTriangle4 = true;
+  bool drawTriangle4 = false;
+  bool drawTriangle5 = false;
+  bool drawTriangle6 = false;
   bool drawLines = false;
   bool drawPoints = false;
 };

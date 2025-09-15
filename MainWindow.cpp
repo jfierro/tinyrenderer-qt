@@ -2,6 +2,7 @@
 #include "./ui_MainWindow.h"
 
 #include <QKeyEvent>
+#include <QMatrix4x4>
 #include <QPainter>
 #include <algorithm>
 
@@ -16,9 +17,10 @@ constexpr QRgb cyan    = qRgba(  0, 255, 255, 255);
 constexpr QRgb yellow  = qRgba(255, 200,   0, 255);
 
 MainWindow::MainWindow (int width, int height, QWidget *parent)
-    : QMainWindow (parent), ui (new Ui::MainWindow), /*fb(64, 64) */ fb(width, height)
+    : QMainWindow (parent), ui (new Ui::MainWindow), /*fb(64, 64)*/  fb(width, height)
 {
   setFixedSize(width, height);
+  //setWindowFlags(Qt::FramelessWindowHint);
   ui->setupUi (this);
   setStatusBar(nullptr);
 
@@ -36,8 +38,10 @@ MainWindow::~MainWindow () { delete ui; }
 void
 MainWindow::paintEvent (QPaintEvent *event)
 {
-  fb.clear(QColor(0,0,0));
+  fb.clear(QColor(0,0,0,0));
 
+  QElapsedTimer timer;
+  timer.start();
   if (model.has_value())
     {
       drawModel();
@@ -46,12 +50,16 @@ MainWindow::paintEvent (QPaintEvent *event)
     {
       drawShapes();
     }
+  qint64 elapsedMs = timer.elapsed();
+  qDebug() << "Frame drawn in " << elapsedMs << "ms";
 
   QPainter painter(this);
   painter.setRenderHint(QPainter::Antialiasing, false);
   painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
   painter.fillRect(rect(), Qt::black);
   painter.drawImage(rect(), fb.qimage());
+
+
 }
 
 void
@@ -65,21 +73,28 @@ MainWindow::drawShapes ()
     {
       fb.triangle({ax, ay}, {bx, by}, {cx, cy}, blue);
     }
-
-  if (drawTriangle2)
+  else if (drawTriangle2)
     {
       fb.triangle2({ax, ay}, {bx, by}, {cx, cy}, orange);
     }
-
-  if (drawTriangle3)
+  else if (drawTriangle3)
     {
       fb.triangle3({ax, ay}, {cx, cy}, {bx, by}, magenta);
     }
-
-  if (drawTriangle4)
+  else if (drawTriangle4)
     {
       fb.triangle4({ax, ay}, {50, 20}, {cx, cy}, magenta);
       fb.triangle4({ax, ay}, {cx, cy}, {bx, by}, cyan);
+    }
+  else if (drawTriangle5)
+    {
+      fb.triangle5({ax, ay}, {50, 20}, {cx, cy}, magenta);
+      fb.triangle5({ax, ay}, {cx, cy}, {bx, by}, cyan);
+    }
+  else if (drawTriangle6)
+    {
+      fb.triangle6({ax, ay}, {50, 20}, {cx, cy}, magenta);
+      fb.triangle6({ax, ay}, {cx, cy}, {bx, by}, cyan);
     }
 
   if (drawLines)
@@ -135,19 +150,33 @@ MainWindow::drawModel ()
   const QVector<QVector3D> &vertices = model->vertices();
   const QVector<uint16_t> &indices = model->indices();
 
-  // QColor c = red;
+
+  void (FrameBuffer::*triangleFunc)(point p, point q, point r, QColor c) = nullptr;
+  if      (drawTriangle)  triangleFunc = &FrameBuffer::triangle;
+  else if (drawTriangle2) triangleFunc = &FrameBuffer::triangle2;
+  else if (drawTriangle3) triangleFunc = &FrameBuffer::triangle3;
+  else if (drawTriangle4) triangleFunc = &FrameBuffer::triangle4;
+  else if (drawTriangle5) triangleFunc = &FrameBuffer::triangle5;
+  else if (drawTriangle6) triangleFunc = &FrameBuffer::triangle6;
+
+
+  std::srand(0x1u);
+  QQuaternion q = QQuaternion::fromAxisAndAngle(QVector3D(0,1,0), yRot);
 
   // A Model read by Model::readObjFile() is guaranteed to have a number indices that is a multiple
   // of 3.
   for (int i = 0; i < indices.size()/3; i++)
     {
-      const QVector3D &v0 = vertices[indices[3*i+0]];
-      const QVector3D &v1 = vertices[indices[3*i+1]];
-      const QVector3D &v2 = vertices[indices[3*i+2]];
+      const QVector3D &v0 = q.rotatedVector(vertices[indices[3*i+0]]);
+      const QVector3D &v1 = q.rotatedVector(vertices[indices[3*i+1]]);
+      const QVector3D &v2 = q.rotatedVector(vertices[indices[3*i+2]]);
 
       //drawWireframeTriangle(v0, v1, v2, c);
       QColor c(std::rand()%255, std::rand()%255, std::rand()%255, 255);
-      fb.triangle4(project(v0), project(v1), project(v2), c);
+      if (triangleFunc != nullptr)
+        {
+          (fb.*triangleFunc)(project(v0), project(v1), project(v2), c);
+        }
     }
 
   // int w = fb.width();
@@ -165,36 +194,72 @@ void
 MainWindow::keyPressEvent (QKeyEvent *e)
 {
   bool stateChange = false;
+
+  int key = e->key();
+  if (Qt::Key_1 <= key && key <= Qt::Key_8)
+    {
+      stateChange = true;
+    }
+  if (Qt::Key_1 <= key && key <= Qt::Key_6)
+    {
+      drawTriangle = false;
+      drawTriangle2 = false;
+      drawTriangle3 = false;
+      drawTriangle4 = false;
+      drawTriangle5 = false;
+      drawTriangle6 = false;
+    }
+
   if (e->key() == Qt::Key_1)
     {
-      drawTriangle = !drawTriangle;
-      stateChange = true;
+      drawTriangle2 = true; // drawTriangle is under maintenance :p
     }
   else if (e->key() == Qt::Key_2)
     {
-      drawTriangle2 = !drawTriangle2;
-      stateChange = true;
+      drawTriangle2 = true;
     }
   else if (e->key() == Qt::Key_3)
     {
-      drawTriangle3 = !drawTriangle3;
-      stateChange = true;
+      drawTriangle3 = true;
     }
   else if (e->key() == Qt::Key_4)
     {
-      drawTriangle4 = !drawTriangle4;
-      stateChange = true;
+      drawTriangle4 = true;
     }
   else if (e->key() == Qt::Key_5)
     {
-      drawLines = !drawLines;
-      stateChange = true;
+      drawTriangle5 = true;
     }
   else if (e->key() == Qt::Key_6)
     {
+      drawTriangle6 = true;
+    }
+  else if (e->key() == Qt::Key_7)
+    {
+      drawLines = !drawLines;
+    }
+  else if (e->key() == Qt::Key_8)
+    {
       drawPoints = !drawPoints;
+    }
+  else if (e->key() == Qt::Key_Escape)
+    {
+      QApplication::exit(0);
+    }
+
+  if (key == Qt::Key_Right)
+    {
+      yRot += 36;
+      yRot %= 360;
       stateChange = true;
     }
+  else if (key == Qt::Key_Left)
+    {
+      yRot -= 36;
+      yRot %= 360;
+      stateChange = true;
+    }
+
   if (stateChange)
     {
       update();
