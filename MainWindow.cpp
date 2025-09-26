@@ -17,9 +17,10 @@ constexpr QRgb cyan    = qRgba(  0, 255, 255, 255);
 constexpr QRgb yellow  = qRgba(255, 200,   0, 255);
 
 MainWindow::MainWindow (int width, int height, QWidget *parent)
-    : QMainWindow (parent), ui (new Ui::MainWindow), /*fb(64, 64)*/  fb(width, height)
+    : QMainWindow (parent), ui (new Ui::MainWindow), /*fb(64, 64)*/  fb(width, height),
+      w(width), h(height)
 {
-  setFixedSize(width, height);
+  setFixedSize(2*width, height);
   //setWindowFlags(Qt::FramelessWindowHint);
   ui->setupUi (this);
   setStatusBar(nullptr);
@@ -39,6 +40,7 @@ void
 MainWindow::paintEvent (QPaintEvent *event)
 {
   fb.clear(QColor(0,0,0,0));
+  fb.clearDepthBuffer();
 
   QElapsedTimer timer;
   timer.start();
@@ -57,7 +59,8 @@ MainWindow::paintEvent (QPaintEvent *event)
   painter.setRenderHint(QPainter::Antialiasing, false);
   painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
   painter.fillRect(rect(), Qt::black);
-  painter.drawImage(rect(), fb.qimage());
+  painter.drawImage(QRectF(0,0,w,h), fb.qimage());
+  painter.drawImage(QRectF(w,0,w,h), fb.depthMap());
 
 
 }
@@ -144,6 +147,15 @@ MainWindow::project(const QVector3D &v)
   return {x, y};
 }
 
+inline point3
+MainWindow::project3(const QVector3D &v)
+{
+  int x = std::clamp((int)std::round((v.x()+1)*fb.width()/2.0), 0, fb.width()-1);
+  int y = std::clamp((int)std::round((v.y()+1)*fb.height()/2.0), 0, fb.height()-1);
+  int z = (v.z() + 1.0)*255.0/2;
+  return {x, y, z};
+}
+
 void
 MainWindow::drawModel ()
 {
@@ -175,7 +187,14 @@ MainWindow::drawModel ()
       QColor c(std::rand()%255, std::rand()%255, std::rand()%255, 255);
       if (triangleFunc != nullptr)
         {
-          (fb.*triangleFunc)(project(v0), project(v1), project(v2), c);
+          if (depthTesting)
+            {
+              fb.triangle3z(project3(v0), project3(v1), project3(v2), c);
+            }
+          else
+            {
+              (fb.*triangleFunc)(project(v0), project(v1), project(v2), c);
+            }
         }
     }
 
@@ -245,6 +264,11 @@ MainWindow::keyPressEvent (QKeyEvent *e)
   else if (e->key() == Qt::Key_Escape)
     {
       QApplication::exit(0);
+    }
+  else if (e->key() == Qt::Key_Z)
+    {
+      depthTesting = !depthTesting;
+      stateChange = true;
     }
 
   if (key == Qt::Key_Right)

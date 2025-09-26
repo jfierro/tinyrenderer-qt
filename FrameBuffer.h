@@ -10,6 +10,13 @@ struct point
   int y;
 };
 
+struct point3
+{
+  int x;
+  int y;
+  int z;
+};
+
 // TODO: don't draw to a QImage, that is very slow becuase setPixelColor() does validations
 //       and probably isn't inlined.
 class FrameBuffer
@@ -19,14 +26,18 @@ public:
 
   void clear(QColor c);
   const QImage &qimage() const;
+  const QImage &depthMap() const;
   int width() const;
   int height() const;
+
+  void clearDepthBuffer();
 
   void set(int x, int y, QColor c);
   void line(int ax, int ay, int bx, int by, QColor c);
   void triangle(point p, point q, point r, QColor c);
   void triangle2(point p, point q, point r, QColor c);
   void triangle3(point p, point q, point r, QColor c);
+  void triangle3z(point3 p, point3 q, point3 r, QColor c);
   void triangle4(point p, point q, point r, QColor c);
   void triangle5(point p, point q, point r, QColor c);
   void triangle6(point p, point q, point r, QColor c);
@@ -34,5 +45,6 @@ public:
 
 private:
   QImage frameBuffer;
+  QImage depthBuffer;
   int w, h;
 };

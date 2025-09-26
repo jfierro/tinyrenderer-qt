@@ -29,8 +29,10 @@ protected:
   void drawWireframeTriangle (const QVector3D &v0, const QVector3D &v1,
                               const QVector3D &v2, QColor c);
   point project(const QVector3D &v);
+  point3 project3(const QVector3D &v);
 
 private:
+  int w, h;
   Ui::MainWindow *ui;
   FrameBuffer fb;
   QLabel bg;
@@ -45,4 +47,6 @@ private:
   bool drawTriangle6 = false;
   bool drawLines = false;
   bool drawPoints = false;
+
+  bool depthTesting{false};
 };

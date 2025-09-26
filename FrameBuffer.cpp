@@ -2,8 +2,9 @@
 #include <QtCore/qdebug.h>
 
 FrameBuffer::FrameBuffer(int w, int h)
-    : w(w), h(h), frameBuffer(w, h, QImage::Format_ARGB32)
-{}
+    : w(w), h(h), frameBuffer(w, h, QImage::Format_ARGB32), depthBuffer(w, h, QImage::Format_Grayscale8)
+{
+}
 
 void
 FrameBuffer::clear (QColor c)
@@ -17,6 +18,13 @@ FrameBuffer::qimage () const
   return frameBuffer;
 }
 
+const QImage &
+FrameBuffer::depthMap() const
+{
+  return depthBuffer;
+}
+
+
 int
 FrameBuffer::width () const
 {
@@ -27,6 +35,12 @@ int
 FrameBuffer::height () const
 {
   return h;
+}
+
+void
+FrameBuffer::clearDepthBuffer()
+{
+  depthBuffer.fill(0);
 }
 
 void
@@ -164,17 +178,22 @@ FrameBuffer::triangle2 (point p, point q, point r, QColor c)
 
 namespace
 {
-float signedArea(point p, point q, point r)
+float signedArea(const point &p, const point &q, const point &r)
 {
   return 0.5f*(p.x*(q.y-r.y) + q.x*(r.y-p.y) + r.x*(p.y-q.y));
 }
 
-float signedArea(float x, float y, point p, point q)
+float signedArea(const point3 &p, const point3 &q, const point3 &r)
+{
+  return 0.5f*(p.x*(q.y-r.y) + q.x*(r.y-p.y) + r.x*(p.y-q.y));
+}
+
+float signedArea(float x, float y, const point &p, const point &q)
 {
   return 0.5f*(x*(p.y-q.y) + p.x*(q.y-y) + q.x*(y-p.y));
 }
 
-bool inside(float x, float y, point p, point q, point r, float area)
+bool inside(float x, float y, const point &p, const point &q, const point &r, float area)
 {
   float alpha = signedArea(x, y, q, r)/area;
   float beta  = signedArea(x, y, r, p)/area;
@@ -224,6 +243,48 @@ FrameBuffer::triangle3 (point p, point q, point r, QColor c)
           if (alpha >= 0 && beta >= 0 && gamma >= 0)
             {
               frameBuffer.setPixelColor(x, frameBuffer.height()-1 - y, c);
+            }
+        }
+    }
+}
+
+// Barycentric coordinate interpolation with depth testing
+void
+FrameBuffer::triangle3z(point3 p, point3 q, point3 r, QColor c)
+{
+  int minx = std::min(std::min(p.x, q.x), r.x);
+  int maxx = std::max(std::max(p.x, q.x), r.x);
+  int miny = std::min(std::min(p.y, q.y), r.y);
+  int maxy = std::max(std::max(p.y, q.y), r.y);
+  float area = signedArea(p, q, r);
+
+  if (area < 1)
+    {
+      return; // backface culling
+    }
+
+  int ignored = 0;
+#pragma omp parallel for
+  for (int y = miny; y <= maxy; y++)
+    {
+      QRgb *colorScanLine = (QRgb*)frameBuffer.scanLine(frameBuffer.height()-1 - y);
+      quint8 *depthScanLine = depthBuffer.scanLine(depthBuffer.height()-1 - y);
+
+      for (int x = minx; x <= maxx; x++)
+        {
+          float alpha = signedArea({x,y,0}, q, r)/area;
+          float beta  = signedArea({x,y,0}, r, p)/area;
+          float gamma = signedArea({x,y,0}, p, q)/area;
+          if (alpha >= 0 && beta >= 0 && gamma >= 0)
+            {
+              int dist = std::clamp((int)std::round(alpha*p.z + beta*q.z + gamma*r.z), 0, 255);
+
+              int dBufVal = depthScanLine[x];
+              if (dist >= dBufVal)
+                {
+                  depthScanLine[x] = dist;
+                  colorScanLine[x] = c.rgba();
+                }
             }
         }
     }
